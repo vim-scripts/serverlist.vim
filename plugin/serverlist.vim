@@ -1,17 +1,33 @@
 " serverlist.vim - Don Yang (http://omoikane.cjb.net)
 "
 " Create key mappings to switch between vim windows.
-" After :so serverlist.vim, each window will be accessible using
-" some key mapping in normal mode, e.g. '\a' for first window.
-" '\.' will show mapping for current window.
+" Mappings created:
+"
+"  \a    bring window 1 to foreground.
+"  \b    bring window 2 to foreground.
+"  ...
+"  \z    bring window 26 to foreground.
+"
+"  \.    show mapping for current window.
+"  \,    refresh mappings for all windows.
+"  \\    cycle to next window (only works if loaded as plugin).
 "
 " remote_foreground() is used to bring window to foreground.
 " Whether or not it actually comes to foreground and receive focus
 " will also depend on your window manager.
 "
+" If one of the windows exit, mappings in other windows are not
+" updated.  Use \, (refresh key mappings) in that case.
+"
+" Window cycling only works if script is loaded as a plugin.
+" This is to ensure that the next window also has the window cycling
+" function defined (didn't seem like a good idea to define functions
+" remotely).
+"
 " 05/06/02: 0.9 - initial release
 " 06/26/02: 1.0 - add mapping to display mapping
 " 06/27/02: 1.1 - preserve current mapping -- thanks to Salman Halim!
+" 09/28/02: 1.2 - cycle to next window -- thanks to Eric Arnold!
 
 
 " Get server name
@@ -53,7 +69,7 @@ endfunction
 function! s:ShowKeyMapping()
    let s:j = stridx(s:klist, 'remote_foreground("' . s:sname . '")')
    let s:k = strpart(s:klist, s:j - 13, 1)
-   let s:j = ':nmap \. :echo "' . s:sname . ': \\' . s:k . '"'
+   let s:j = ':nn \. :echo "' . s:sname . ': \\' . s:k . '"'
    let s:j = s:j . nr2char(22) . nr2char(22)
    let s:j = s:j . nr2char(22) . nr2char(13) . '<CR>'
    let s:j = s:j . ':sil! call histdel(":", -2)<CR>'
@@ -63,7 +79,7 @@ endfunction
 " Create key mapping for one client
 function! s:SwitchWindow()
    " Create key mapping to switch window
-   let s:klist = s:klist . ':nmap \' . s:k . ' '
+   let s:klist = s:klist . ':nn \' . s:k . ' '
    let s:klist = s:klist . ':sil! call remote_foreground("' . s:sname . '")'
    let s:klist = s:klist . nr2char(22) . nr2char(22)
    let s:klist = s:klist . nr2char(22) . nr2char(13) . '<CR>'
@@ -145,16 +161,106 @@ function! s:Broadcast()
 endfunction
 
 
-" Script entry point
+" Foreground next window
+function! CycleWindow()
+   " Get key mapping for current window
+   let s:k = maparg('\.', 'n')
+   let s:j = stridx(s:k, ': \\')
+   if s:j < 1
+      " No mapping defined for current window, maybe user undefined it?
+      unlet s:j s:k
+      return
+   endif
+   let s:k = strpart(s:k, s:j + 4, 1)
 
-if !has('clientserver')
-   echo 'VIM not compiled with +clientserver'
-else
-   " Setup keys
-   let s:slist = serverlist()
+   " Set dictionary for cycle order.
+   " Windows are cycled by alphabetical order of key mapping assigned to them.
+   " Because key mappings are consistent across windows, this guarantees
+   " that the cycle order will also be consistent.
    let s:kdict = 'abcdefghijklmnopqrstuvwxyz'
-   call s:Broadcast()
+   let s:kdict = strpart(s:kdict, stridx(s:kdict, s:k) + 1) . s:kdict
+
+   " Cycle through key mappings until a good window is found
+   let s:i = ''
+   let s:cmd = ''
+   while s:kdict != ''
+      let s:cmd = maparg("\\" . strpart(s:kdict, 0, 1), 'n')
+      if s:cmd != ''
+         " Found good mapping, check if next window still exists
+         let s:i = strpart(s:cmd, stridx(s:cmd, '"') + 1)
+         let s:i = strpart(s:i, 0, stridx(s:i, '"'))
+         silent! let s:i = remote_expr(s:i, "maparg('\\.', 'n')")
+         if s:i != ''
+            " Good window found, bring to foreground (later)
+            break
+         endif
+         let s:cmd = ''
+      endif
+      let s:kdict = strpart(s:kdict, 1)
+   endwhile
 
    " Release storage
-   unlet s:slist s:sname s:klist s:kdict s:i s:j s:k
+   unlet s:i s:j s:k s:kdict
+
+   " Bring next window to foreground now.
+   " This must be the last command, otherwise original window regains focus.
+   exec s:cmd
+endfunction
+
+" Build/broadcast key mappings
+function! MapAllWindows()
+   " Delayed load
+   if exists('s:reload')
+      " Clear trigger
+      unlet s:reload
+      augroup ServerList
+         autocmd!
+      augroup END
+      augroup! ServerList
+
+      " Try getting list of windows again
+      let s:slist = serverlist()
+      if s:slist == ''
+         echoerr 'Can not get list of VIM windows'
+         unlet s:slist
+         return
+      endif
+   else
+      let s:slist = serverlist()
+   endif
+
+   " Setup keys
+   if s:slist == ''
+      " List of windows not available
+      if has('autocmd')
+         " If VIM was built with autocommands, try mapping key names later
+         " Function is tied to BufWinEnter, not VimEnter or GUIEnter, etc.
+         " Tests show that not all server names are available at earlier times.
+         augroup ServerList
+            autocmd!
+            autocmd BufWinEnter * call MapAllWindows()
+         augroup END
+         let s:reload = 1
+      else
+         " VIM was not built with autocommands, give up
+         echoerr 'Can not get list of VIM windows'
+      endif
+   else
+      " Windows enumerated okay, proceed to setup keys
+      let s:kdict = 'abcdefghijklmnopqrstuvwxyz'
+      call s:Broadcast()
+
+      " Release storage
+      unlet s:i s:j s:k s:slist s:sname s:klist s:kdict
+   endif
+endfunction
+
+
+" Script entry point
+if !has('clientserver')
+   echoerr 'VIM was not compiled with +clientserver'
+else
+   exec 'nnoremap \, :call MapAllWindows()' . nr2char(13)
+   exec 'nnoremap \\ :call CycleWindow()' . nr2char(13)
+   call MapAllWindows()
 endif
