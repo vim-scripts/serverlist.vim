@@ -3,12 +3,14 @@
 " Create key mappings to switch between vim windows.
 " After :so serverlist.vim, each window will be accessible using
 " some key mapping in normal mode, e.g. '\a' for first window.
+" '\.' will show mapping for current window.
 "
 " remote_foreground() is used to bring window to foreground.
 " Whether or not it actually comes to foreground and receive focus
 " will also depend on your window manager.
 "
-" 05/06/02
+" 05/06/02: 0.9 - initial release
+" 06/26/02: 1.0 - add mapping to display mapping
 
 
 " Get server name
@@ -70,13 +72,22 @@ function! s:CreateKeyMaps()
    endwhile
 endfunction
 
+" Add mapping to show key mapping
+function! s:ShowKeyMapping()
+   let s:j = ':nmap \. :echo "'.s:sname.': \\'.strpart(s:kdict, s:i, 1).'"'
+   let s:j = s:j . nr2char(22) . nr2char(22)
+   let s:j = s:j . nr2char(22) . nr2char(13) . '<CR>'
+   let s:j = s:j . ':sil! call histdel(":", -2)<CR>'
+   call remote_send(s:sname, s:j)
+endfunction
+
 " Broadcast key mappings to each VIM window
 function! s:Broadcast()
-   " Generate client keystrokes
+   " Generate common client keystrokes
    let s:klist = '<C-\><C-N>'
    call s:UnmapKeys()
    call s:CreateKeyMaps()
-   let s:klist = s:klist .  ':sil! call histdel(":", "histdel")<CR>'
+   let s:klist = s:klist . ':sil! call histdel(":", "histdel")<CR>\.'
 
    " Broadcast to everyone
    let s:i = 0
@@ -85,6 +96,7 @@ function! s:Broadcast()
       if s:sname == ''
          break
       endif
+      call s:ShowKeyMapping()
       call remote_send(s:sname, s:klist)
       let s:i = s:i + 1
    endwhile
