@@ -1,4 +1,4 @@
-" serverlist.vim - Don Yang (http://omoikane.cjb.net)
+" serverlist.vim - Don Yang (uguu.org)
 "
 " Create key mappings to switch between vim windows.
 " Mappings created:
@@ -31,6 +31,7 @@
 " 09/28/02: 1.2 - cycle to next window -- thanks to Eric Arnold!
 " 09/30/02: 1.21 - fix to get around cmap <C-V> issue
 " 11/26/02: 1.22 - cycle to previous window
+" 06/02/03: 1.3 - changes for Vim 6.2
 
 
 " Get server name
@@ -58,12 +59,7 @@ function! s:UnmapKeys()
    let s:i = 0
 
    while s:i < strlen(s:kdict)
-      " Clear key mapping
       let s:klist = s:klist . ':sil! nunmap \'.strpart(s:kdict, s:i, 1).'<CR>'
-
-      " Remove last command (clear key mapping) from history
-      let s:klist = s:klist . ':sil! call histdel(":", -2)<CR>'
-
       let s:i = s:i + 1
    endwhile
 endfunction
@@ -75,19 +71,14 @@ function! s:ShowKeyMapping()
    let s:j = ':nn \. :echo "' . s:sname . ': \\' . s:k . '"'
    let s:j = ":exec '" . s:j . "'.nr2char(13)<CR>"
 
-   let s:j = s:j . ':sil! call histdel(":", -2)<CR>'
-   call remote_send(s:sname, s:j)
+   let s:k = s:klist . s:j
 endfunction
 
 " Create key mapping for one client
 function! s:SwitchWindow()
-   " Create key mapping to switch window
    let s:klist = s:klist . ":exec ':nn \\" . s:k . " "
    let s:klist = s:klist . ':sil! call remote_foreground("' . s:sname . '")'
    let s:klist = s:klist . "'.nr2char(13)<CR>"
-
-   " Remove last command (create key mapping) from history
-   let s:klist = s:klist . ':sil! call histdel(":", -2)<CR>'
 endfunction
 
 " Create key mappings for all clients
@@ -141,6 +132,19 @@ function! s:CreateKeyMaps()
    endwhile
 endfunction
 
+" Send keystrokes to a VIM window
+function! s:SendKeys()
+   if v:version < 602
+      " Before Vim 6.2, remote_send commands would flood the history,
+      " so remove commands for everything sent
+      let s:k = substitute(s:k, "<CR>", "<CR>:call histdel(':', -2)<CR>", "g")
+      call remote_send(s:sname, s:k . '\.')
+   else
+      " As of Vim 6.2, remote_send is no longer recorded in the history
+      call remote_send(s:sname, s:k . ':normal \.<CR>')
+   endif
+endfunction
+
 " Broadcast key mappings to each VIM window
 function! s:Broadcast()
    " Generate common client keystrokes
@@ -155,9 +159,8 @@ function! s:Broadcast()
       if s:sname == ''
          break
       endif
-      call remote_send(s:sname, s:klist)
       call s:ShowKeyMapping()
-      call remote_send(s:sname, ':sil! call histdel(":", "histdel")<CR>\.')
+      call s:SendKeys()
       let s:i = s:i + 1
    endwhile
 endfunction
