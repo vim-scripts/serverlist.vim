@@ -11,6 +11,7 @@
 "  \.    show mapping for current window.
 "  \,    refresh mappings for all windows.
 "  \\    cycle to next window (only works if loaded as plugin).
+"  \/    cycle to previous window (only works if loaded as plugin).
 "
 " remote_foreground() is used to bring window to foreground.
 " Whether or not it actually comes to foreground and receive focus
@@ -29,6 +30,7 @@
 " 06/27/02: 1.1 - preserve current mapping -- thanks to Salman Halim!
 " 09/28/02: 1.2 - cycle to next window -- thanks to Eric Arnold!
 " 09/30/02: 1.21 - fix to get around cmap <C-V> issue
+" 11/26/02: 1.22 - cycle to previous window
 
 
 " Get server name
@@ -161,8 +163,8 @@ function! s:Broadcast()
 endfunction
 
 
-" Foreground next window
-function! CycleWindow()
+" Window cycling functions
+function! s:CycleWindow()
    " Get key mapping for current window
    let s:k = maparg('\.', 'n')
    let s:j = stridx(s:k, ': \\')
@@ -177,7 +179,6 @@ function! CycleWindow()
    " Windows are cycled by alphabetical order of key mapping assigned to them.
    " Because key mappings are consistent across windows, this guarantees
    " that the cycle order will also be consistent.
-   let s:kdict = 'abcdefghijklmnopqrstuvwxyz'
    let s:kdict = strpart(s:kdict, stridx(s:kdict, s:k) + 1) . s:kdict
 
    " Cycle through key mappings until a good window is found
@@ -201,11 +202,23 @@ function! CycleWindow()
 
    " Release storage
    unlet s:i s:j s:k s:kdict
+endfunction
+
+function! CycleNextWindow()
+   let s:kdict = 'abcdefghijklmnopqrstuvwxyz'
+   call s:CycleWindow()
 
    " Bring next window to foreground now.
    " This must be the last command, otherwise original window regains focus.
    exec s:cmd
 endfunction
+
+function! CyclePreviousWindow()
+   let s:kdict = 'zyxwvutsrqponmlkjihgfedcba'
+   call s:CycleWindow()
+   exec s:cmd
+endfunction
+
 
 " Build/broadcast key mappings
 function! MapAllWindows()
@@ -221,7 +234,7 @@ function! MapAllWindows()
       " Try getting list of windows again
       let s:slist = serverlist()
       if s:slist == ''
-         echoerr 'Can not get list of VIM windows'
+         echomsg 'Can not get list of VIM windows'
          unlet s:slist
          return
       endif
@@ -243,7 +256,7 @@ function! MapAllWindows()
          let s:reload = 1
       else
          " VIM was not built with autocommands, give up
-         echoerr 'Can not get list of VIM windows'
+         echomsg 'Can not get list of VIM windows'
       endif
    else
       " Windows enumerated okay, proceed to setup keys
@@ -261,6 +274,7 @@ if !has('clientserver')
    echoerr 'VIM was not compiled with +clientserver'
 else
    exec 'nnoremap \, :call MapAllWindows()' . nr2char(13)
-   exec 'nnoremap \\ :call CycleWindow()' . nr2char(13)
+   exec 'nnoremap \\ :call CycleNextWindow()' . nr2char(13)
+   exec 'nnoremap \/ :call CyclePreviousWindow()' . nr2char(13)
    call MapAllWindows()
 endif
