@@ -87,7 +87,6 @@ function! s:Broadcast()
    let s:klist = '<C-\><C-N>'
    call s:UnmapKeys()
    call s:CreateKeyMaps()
-   let s:klist = s:klist . ':sil! call histdel(":", "histdel")<CR>\.'
 
    " Broadcast to everyone
    let s:i = 0
@@ -96,8 +95,9 @@ function! s:Broadcast()
       if s:sname == ''
          break
       endif
-      call s:ShowKeyMapping()
       call remote_send(s:sname, s:klist)
+      call s:ShowKeyMapping()
+      call remote_send(s:sname, ':sil! call histdel(":", "histdel")<CR>\.')
       let s:i = s:i + 1
    endwhile
 endfunction
