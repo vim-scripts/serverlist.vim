@@ -32,6 +32,9 @@
 " 09/30/02: 1.21 - fix to get around cmap <C-V> issue
 " 11/26/02: 1.22 - cycle to previous window
 " 06/02/03: 1.3 - changes for Vim 6.2
+" 03/04/04: 1.31 - always delay mapping windows until buffer is available
+"                  fixes 'GVIM waits forever for the Press Enter' prompt
+"                  after patch 6.2.3xx
 
 
 " Get server name
@@ -223,44 +226,35 @@ function! CyclePreviousWindow()
 endfunction
 
 
+" Set autocommand to map windows later
+function! DelayMapAllWindows()
+   if has('autocmd')
+      augroup ServerList
+         autocmd!
+         autocmd BufWinEnter * call MapAllWindows()
+      augroup END
+      let s:reload = 1
+   else
+      call MapAllWindows()
+   endif
+endfunction
+
 " Build/broadcast key mappings
 function! MapAllWindows()
-   " Delayed load
+   " Clear trigger
    if exists('s:reload')
-      " Clear trigger
       unlet s:reload
       augroup ServerList
          autocmd!
       augroup END
       augroup! ServerList
-
-      " Try getting list of windows again
-      let s:slist = serverlist()
-      if s:slist == ''
-         echomsg 'Can not get list of VIM windows'
-         unlet s:slist
-         return
-      endif
-   else
-      let s:slist = serverlist()
    endif
 
    " Setup keys
+   let s:slist = serverlist()
    if s:slist == ''
       " List of windows not available
-      if has('autocmd')
-         " If VIM was built with autocommands, try mapping key names later
-         " Function is tied to BufWinEnter, not VimEnter or GUIEnter, etc.
-         " Tests show that not all server names are available at earlier times.
-         augroup ServerList
-            autocmd!
-            autocmd BufWinEnter * call MapAllWindows()
-         augroup END
-         let s:reload = 1
-      else
-         " VIM was not built with autocommands, give up
-         echomsg 'Can not get list of VIM windows'
-      endif
+      echomsg 'Can not get list of VIM windows'
    else
       " Windows enumerated okay, proceed to setup keys
       let s:kdict = 'abcdefghijklmnopqrstuvwxyz'
@@ -279,5 +273,5 @@ else
    exec 'nnoremap \, :call MapAllWindows()' . nr2char(13)
    exec 'nnoremap \\ :call CycleNextWindow()' . nr2char(13)
    exec 'nnoremap \/ :call CyclePreviousWindow()' . nr2char(13)
-   call MapAllWindows()
+   call DelayMapAllWindows()
 endif
