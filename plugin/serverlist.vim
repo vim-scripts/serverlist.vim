@@ -28,6 +28,7 @@
 " 06/26/02: 1.0 - add mapping to display mapping
 " 06/27/02: 1.1 - preserve current mapping -- thanks to Salman Halim!
 " 09/28/02: 1.2 - cycle to next window -- thanks to Eric Arnold!
+" 09/30/02: 1.21 - fix to get around cmap <C-V> issue
 
 
 " Get server name
@@ -70,8 +71,8 @@ function! s:ShowKeyMapping()
    let s:j = stridx(s:klist, 'remote_foreground("' . s:sname . '")')
    let s:k = strpart(s:klist, s:j - 13, 1)
    let s:j = ':nn \. :echo "' . s:sname . ': \\' . s:k . '"'
-   let s:j = s:j . nr2char(22) . nr2char(22)
-   let s:j = s:j . nr2char(22) . nr2char(13) . '<CR>'
+   let s:j = ":exec '" . s:j . "'.nr2char(13)<CR>"
+
    let s:j = s:j . ':sil! call histdel(":", -2)<CR>'
    call remote_send(s:sname, s:j)
 endfunction
@@ -79,10 +80,9 @@ endfunction
 " Create key mapping for one client
 function! s:SwitchWindow()
    " Create key mapping to switch window
-   let s:klist = s:klist . ':nn \' . s:k . ' '
+   let s:klist = s:klist . ":exec ':nn \\" . s:k . " "
    let s:klist = s:klist . ':sil! call remote_foreground("' . s:sname . '")'
-   let s:klist = s:klist . nr2char(22) . nr2char(22)
-   let s:klist = s:klist . nr2char(22) . nr2char(13) . '<CR>'
+   let s:klist = s:klist . "'.nr2char(13)<CR>"
 
    " Remove last command (create key mapping) from history
    let s:klist = s:klist . ':sil! call histdel(":", -2)<CR>'
