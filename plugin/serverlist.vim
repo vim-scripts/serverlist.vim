@@ -11,6 +11,7 @@
 "
 " 05/06/02: 0.9 - initial release
 " 06/26/02: 1.0 - add mapping to display mapping
+" 06/27/02: 1.1 - preserve current mapping -- thanks to Salman Halim!
 
 
 " Get server name
@@ -48,37 +49,78 @@ function! s:UnmapKeys()
    endwhile
 endfunction
 
-" Map server keys
-function! s:CreateKeyMaps()
-   let s:i = 0
+" Add mapping to show key mapping
+function! s:ShowKeyMapping()
+   let s:j = stridx(s:klist, 'remote_foreground("' . s:sname . '")')
+   let s:k = strpart(s:klist, s:j - 13, 1)
+   let s:j = ':nmap \. :echo "' . s:sname . ': \\' . s:k . '"'
+   let s:j = s:j . nr2char(22) . nr2char(22)
+   let s:j = s:j . nr2char(22) . nr2char(13) . '<CR>'
+   let s:j = s:j . ':sil! call histdel(":", -2)<CR>'
+   call remote_send(s:sname, s:j)
+endfunction
 
-   while s:i < strlen(s:kdict)
+" Create key mapping for one client
+function! s:SwitchWindow()
+   " Create key mapping to switch window
+   let s:klist = s:klist . ':nmap \' . s:k . ' '
+   let s:klist = s:klist . ':sil! call remote_foreground("' . s:sname . '")'
+   let s:klist = s:klist . nr2char(22) . nr2char(22)
+   let s:klist = s:klist . nr2char(22) . nr2char(13) . '<CR>'
+
+   " Remove last command (create key mapping) from history
+   let s:klist = s:klist . ':sil! call histdel(":", -2)<CR>'
+endfunction
+
+" Create key mappings for all clients
+function! s:CreateKeyMaps()
+   " Get key mappings for clients that already have them
+   let s:i = 0
+   while strlen(s:kdict) > 0
       call s:ServerName()
       if s:sname == ''
          " No more windows
          break
       endif
 
-      " Create key mapping to switch window
-      let s:klist = s:klist . ':nmap \' . strpart(s:kdict, s:i, 1) . ' '
-      let s:klist = s:klist . ':sil! call remote_foreground("' . s:sname . '")'
-      let s:klist = s:klist . nr2char(22) . nr2char(22)
-      let s:klist = s:klist . nr2char(22) . nr2char(13) . '<CR>'
+      " Get key mapping
+      let s:k = remote_expr(s:sname, "maparg('\\.', 'n')")
+      let s:j = stridx(s:k, s:sname . ': \')
+      if s:j > 0
+         " Client already has shortcut key defined.
+         " Get current key
+         let s:k = strpart(s:k, s:j + strlen(s:sname) + 4, 1)
 
-      " Remove last command (create key mapping) from history
-      let s:klist = s:klist . ':sil! call histdel(":", -2)<CR>'
+         " Remove key from dictionary
+         let s:j = stridx(s:kdict, s:k)
+         let s:kdict = strpart(s:kdict, 0, s:j) . strpart(s:kdict, s:j + 1)
+         call s:SwitchWindow()
+      endif
 
       let s:i = s:i + 1
    endwhile
-endfunction
 
-" Add mapping to show key mapping
-function! s:ShowKeyMapping()
-   let s:j = ':nmap \. :echo "'.s:sname.': \\'.strpart(s:kdict, s:i, 1).'"'
-   let s:j = s:j . nr2char(22) . nr2char(22)
-   let s:j = s:j . nr2char(22) . nr2char(13) . '<CR>'
-   let s:j = s:j . ':sil! call histdel(":", -2)<CR>'
-   call remote_send(s:sname, s:j)
+   " Assign keys to clients that are not yet assigned
+   let s:i = 0
+   while strlen(s:kdict) > 0
+      call s:ServerName()
+      if s:sname == ''
+         break
+      endif
+
+      " Get key mapping
+      let s:k = remote_expr(s:sname, "maparg('\\.', 'n')")
+      let s:j = stridx(s:k, s:sname . ': \')
+      if s:j < 0
+         " Client do not have shortcut key defined yet.
+         " Use first key available from dictionary
+         let s:k = strpart(s:kdict, 0, 1)
+         let s:kdict = strpart(s:kdict, 1)
+         call s:SwitchWindow()
+      endif
+
+      let s:i = s:i + 1
+   endwhile
 endfunction
 
 " Broadcast key mappings to each VIM window
@@ -90,7 +132,7 @@ function! s:Broadcast()
 
    " Broadcast to everyone
    let s:i = 0
-   while s:i < strlen(s:kdict)
+   while 1
       call s:ServerName()
       if s:sname == ''
          break
