@@ -1,0 +1,3 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=289
+
+Script creates key mappings for each existing VIM window.  After sourcing the script, you can press \a in normal mode to switch to window 1, \b for window 2, etc.  The keys are broadcasted to each window, such that the same key always map to the same window.  \. will show mapping for current window.
